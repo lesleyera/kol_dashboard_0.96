@@ -3,38 +3,76 @@ import pandas as pd
 import numpy as np
 import datetime
 import os
+import time
 import streamlit.components.v1 as components
 from streamlit_calendar import calendar as st_calendar
+from PIL import Image
+
+import folium
+from streamlit_folium import st_folium
 
 # -----------------------------------------------------------------
 # 0. Auth & Page Config
 # -----------------------------------------------------------------
-st.set_page_config(
-    page_title="MEDIT KOL Performance Cockpit",
-    page_icon="🟦",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+try:
+    logo_image = Image.open("image_0.png")
+    st.set_page_config(
+        page_title="MEDIT KOL Performance Cockpit",
+        page_icon="💎",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
+except FileNotFoundError:
+    st.set_page_config(
+        page_title="MEDIT KOL Performance Cockpit",
+        page_icon="💎",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
 
-# [설정] 색상 및 변수 정의
+# [설정] 색상 정의
 ACCESS_CODE = "medit2026"
-COLOR_PRIMARY = "#0044CC"  # MEDIT Blue
-COLOR_DANGER = "#DC2626"   # Red (Delayed)
-COLOR_WARNING = "#F59E0B"  # Orange (Warning)
-COLOR_BG = "#F5F7FA"       
-COLOR_CARD = "#FFFFFF"     
+COLOR_PRIMARY = "#2B5CD7"  # [Main] Royal Blue
+COLOR_NAVY = "#002060"     # [Sub] Navy Blue
+COLOR_DANGER = "#DC2626"   # Red
+COLOR_WARNING = "#F59E0B"  # Orange
+COLOR_BG = "#FFFFFF"       # White
+
+# [설정] 구글 맵 API 키
+GOOGLE_MAPS_API_KEY = "AIzaSyBboTIDL47Dt0ayBAgSRk-SixRphzfhKSg"
 
 # 세션 상태 초기화
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
+# -----------------------------------------------------------------
+# 로그인 & 세션 관리
+# -----------------------------------------------------------------
 def check_password():
-    """로그인 화면"""
+    """로그인 화면 (버튼 수직 정렬 완벽 수정)"""
     
+    # 세션 관리
+    if "last_active" in st.session_state:
+        if time.time() - st.session_state["last_active"] > 1200:
+            st.session_state["authenticated"] = False
+            st.query_params.clear()
+            del st.session_state["last_active"]
+            st.rerun()
+        else:
+            st.session_state["last_active"] = time.time()
+
+    if not st.session_state.get("authenticated", False):
+        if st.query_params.get("logged_in") == "true":
+            st.session_state["authenticated"] = True
+            st.session_state["last_active"] = time.time()
+
     def password_entered():
         entered = st.session_state.get("password", "")
         if entered == ACCESS_CODE:
             st.session_state["authenticated"] = True
+            st.session_state["last_active"] = time.time()
+            st.query_params["logged_in"] = "true"
+            st.session_state["auth_error"] = False
         else:
             st.session_state["authenticated"] = False
             st.session_state["auth_error"] = True
@@ -43,101 +81,142 @@ def check_password():
         st.markdown(
             f"""
             <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
             
-            .stApp {{
-                background-color: #FFFFFF;
-                font-family: 'Inter', sans-serif;
-            }}
+            .stApp {{ background-color: #FFFFFF; font-family: 'Inter', sans-serif; }}
             
+            /* 로그인 컨테이너 (투명) */
             .login-container {{
-                max-width: 520px;
-                margin: 15vh auto 0 auto; 
-                padding: 60px 50px;
-                background-color: transparent; 
-                border: none;
-                box-shadow: none; 
+                background-color: transparent;
+                padding: 60px 20px;
                 text-align: center;
+                max-width: 600px; 
+                margin: 8vh auto 0 auto; 
             }}
-            
-            .login-title {{
-                color: {COLOR_PRIMARY};
-                font-size: 2.2rem;
-                font-weight: 800;
-                margin-bottom: 50px;
-                letter-spacing: -0.5px;
-                white-space: nowrap;
-                line-height: 1.2;
-            }}
-            
-            .stTextInput {{
-                width: 320px !important;
+
+            /* 🔹 입력 + 버튼 세트 래퍼 (가운데 정렬용) */
+            .login-inner {{
+                max-width: 400px;
                 margin: 0 auto;
             }}
             
-            .stTextInput > div > div > input {{
-                text-align: center;
-                font-size: 1.3rem;
-                padding: 14px;
-                border: 2px solid #E0E0E0 !important;
-                border-radius: 12px;
-                background-color: #FAFAFA;
-                color: #333;
-                font-weight: 600;
-                transition: all 0.3s ease;
-            }}
-            
-            .stTextInput > div > div > input:focus {{
-                border-color: {COLOR_PRIMARY} !important;
-                background-color: #FFFFFF;
-                box-shadow: 0 0 0 4px rgba(0, 68, 204, 0.1);
-            }}
-
-            .input-label {{
-                font-size: 1rem;
+            /* 타이틀 */
+            .login-title {{
+                font-size: 2.8rem; font-weight: 900; 
                 color: {COLOR_PRIMARY};
-                font-weight: 700;
-                margin-bottom: 8px;
-                display: block;
-            }}
-
-            .error-msg {{
-                color: #D32F2F;
-                background-color: #FFEBEE;
-                padding: 12px;
-                border-radius: 8px;
-                font-size: 0.9rem;
-                margin-top: 25px;
-                font-weight: 600;
+                margin-bottom: 40px; white-space: nowrap; 
+                letter-spacing: -0.5px; line-height: 1.2; text-align: center;
             }}
             
-            .login-footer {{
-                margin-top: 80px;
-                color: #A0AEC0;
-                font-size: 0.8rem;
-                font-weight: 500;
+            /* 라벨 */
+            .input-label {{
+                font-size: 1rem; font-weight: 700; color: #555; 
+                margin-bottom: 15px; text-transform: uppercase; 
+                letter-spacing: 1.2px; display: block; text-align: center;
             }}
-
-            header {{visibility: hidden;}}
-            footer {{visibility: hidden;}}
+            
+            /* 입력창 컴포넌트 중앙 정렬 */
+            .stTextInput {{ 
+                width: 100%; 
+                max-width: 400px; 
+                margin-left: auto !important; 
+                margin-right: auto !important; 
+            }}
+            
+            .stTextInput > div > div > input {{
+                padding: 16px 20px; font-size: 1.2rem; 
+                border: 1px solid #D1D5DB !important;
+                border-radius: 12px; text-align: center; 
+                background-color: #FAFAFA; color: #333;
+                box-shadow: none !important; transition: all 0.2s ease;
+            }}
+            .stTextInput > div > div > input:focus {{
+                border-color: {COLOR_PRIMARY} !important; background-color: #fff;
+                box-shadow: 0 0 0 3px rgba(43, 92, 215, 0.15) !important;
+            }}
+            
+            /* 버튼 컴포넌트 중앙 정렬 */
+            div[data-testid="stButton"] {{
+                width: 100% !important;
+                display: flex;
+                justify-content: center;
+                margin-top: 20px;
+            }}
+            
+            div[data-testid="stButton"] > button {{
+                background-color: {COLOR_PRIMARY}; color: white; 
+                border: none; padding: 14px 60px;
+                font-size: 1.1rem; border-radius: 50px; 
+                cursor: pointer; font-weight: 700;
+                transition: background-color 0.2s, transform 0.1s; 
+                box-shadow: 0 4px 12px rgba(0, 32, 96, 0.2);
+            }}
+            div[data-testid="stButton"] > button:hover {{ 
+                background-color: #1e4bb8; color: white; border: none;
+            }}
+            
+            .error-msg {{
+                color: #D32F2F; background-color: #FEF2F2; 
+                padding: 12px; border-radius: 8px; font-size: 0.9rem; 
+                margin-top: 30px; font-weight: 600; text-align: center;
+            }}
+            
+            .login-footer {{ 
+                margin-top: 100px; font-size: 0.8rem; 
+                color: #CBD5E0; font-weight: 400; text-align: center; 
+                width: 100%; display: block;
+            }}
+            
+            header {{visibility: hidden;}} footer {{visibility: hidden;}}
             </style>
             """, unsafe_allow_html=True
         )
         
-        st.markdown('<div class="login-container">', unsafe_allow_html=True)
-        st.markdown('<div class="login-title">MEDIT KOL Performance Cockpit</div>', unsafe_allow_html=True)
+        # 3-컬럼 레이아웃 그대로 유지
+        col1, col2, col3 = st.columns([1, 1.5, 1])
         
-        st.markdown('<div class="input-label">Access Code:</div>', unsafe_allow_html=True)
-        st.text_input("Password", type="password", key="password", on_change=password_entered, label_visibility="collapsed")
-        
-        if st.session_state.get("auth_error"):
-            st.markdown('<div class="error-msg">⚠️ Incorrect Access Code</div>', unsafe_allow_html=True)
-        
-        st.markdown('<div class="login-footer">powered by DWG Inc. 2025.</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        with col2:
+            st.markdown('<div class="login-container">', unsafe_allow_html=True)
+            
+            # 로고 이미지 중앙 정렬
+            col_img1, col_img2, col_img3 = st.columns([1, 1, 1])
+            with col_img2:
+                try:
+                    st.image("image_0.png", width=60)
+                except:
+                    pass
+            
+            st.markdown('<div class="login-title">MEDIT KOL Performance Cockpit</div>', unsafe_allow_html=True)
+            
+             # 🔹 Access Code + Enter 버튼을 같은 세로축 중앙에 배치
+            inner_left, inner_center, inner_right = st.columns([1, 2, 1])
+            with inner_center:
+                st.markdown('<div class="input-label">Access Code</div>', unsafe_allow_html=True)
+
+                st.text_input(
+                    "Password",
+                    type="password",
+                    key="password",
+                    on_change=password_entered,
+                    label_visibility="collapsed"
+                )
+
+                # 버튼 (입력창과 같은 중앙축, 바로 아래 위치)
+                st.button("Enter", on_click=password_entered, use_container_width=True)
+
+            if st.session_state.get("auth_error"):
+                st.markdown(
+                    '<div class="error-msg">⚠️ Incorrect Access Code</div>',
+                    unsafe_allow_html=True
+                )
+            
+            st.markdown('<div class="login-footer">© 2025 powered by DWG Inc.</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)  # </div class="login-container">
 
         return False
+    
     return True
+
 
 if not check_password():
     st.stop()
@@ -150,136 +229,68 @@ def local_css():
     st.markdown(
         f"""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@300;400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap');
         
-        .stApp {{
-            background-color: #F5F7FA;
-            color: #111;
-            font-family: 'Segoe UI', sans-serif;
-        }}
-
-        .block-container {{
-            padding-top: 6rem !important; 
-            padding-bottom: 4rem !important;
-        }}
+        html, body, [class*="css"] {{ font-family: 'Inter', sans-serif !important; }}
+        .stApp {{ background-color: {COLOR_BG}; color: #111; font-family: 'Inter', sans-serif !important; }}
+        .block-container {{ padding-top: 6rem !important; padding-bottom: 4rem !important; }}
 
         /* Header Box */
         .app-header {{
-            background: linear-gradient(135deg, {COLOR_PRIMARY} 0%, #003399 100%);
-            border-radius: 12px;
-            padding: 24px 32px;
-            box-shadow: 0 4px 20px rgba(0, 68, 204, 0.15);
-            color: #FFFFFF; 
-            margin-bottom: 30px;
-            margin-top: 10px; 
+            background: linear-gradient(135deg, {COLOR_PRIMARY} 0%, #1e4bb8 100%);
+            border-radius: 12px; padding: 24px 32px;
+            box-shadow: 0 4px 20px rgba(43, 92, 215, 0.2);
+            color: #FFFFFF; margin-bottom: 30px; margin-top: 10px; 
         }}
         .app-title {{
-            font-size: 1.8rem;
-            font-weight: 700; 
-            color: #FFFFFF !important;
-            margin-bottom: 4px;
+            font-size: 1.8rem; font-weight: 800; color: #FFFFFF !important;
+            margin-bottom: 4px; font-family: 'Inter', sans-serif !important;
         }}
-        .app-subtitle {{
-            font-size: 0.95rem;
-            opacity: 0.9;
-            font-weight: 300;
-        }}
+        .app-subtitle {{ font-size: 0.95rem; opacity: 0.9; font-weight: 300; }}
         
         /* Table Headers */
         thead tr th {{
-            background-color: {COLOR_PRIMARY} !important; 
-            color: #FFFFFF !important; 
-            font-size: 13px !important;
-            font-weight: 600 !important;
-            text-transform: uppercase;
+            background-color: {COLOR_PRIMARY} !important; color: #FFFFFF !important; 
+            font-size: 13px !important; font-weight: 600 !important;
+            text-transform: uppercase; font-family: 'Inter', sans-serif !important;
         }}
 
-        /* Common Info Box (Shared UI) */
+        /* Info Box */
         .info-box {{
-            background-color: #FFFFFF;
-            padding: 24px;
-            border-radius: 12px;
-            border: 1px solid #E5E7EB;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-            margin-bottom: 20px;
+            background-color: #FFFFFF; padding: 24px; border-radius: 12px;
+            border: 1px solid #E5E7EB; box-shadow: 0 2px 8px rgba(0,0,0,0.03); margin-bottom: 20px;
         }}
-        
-        .profile-label {{
-            font-size: 0.85rem;
-            color: #6B7280;
-            font-weight: 600;
-            margin-bottom: 5px;
-            text-transform: uppercase;
-        }}
-        
-        .profile-value {{
-            font-size: 1.1rem;
-            color: #111;
-            font-weight: 700;
+        .profile-label {{ font-size: 0.85rem; color: #6B7280; font-weight: 600; margin-bottom: 5px; text-transform: uppercase; }}
+        .profile-value {{ font-size: 1.1rem; color: #111; font-weight: 700; }}
+        .info-label {{ font-size: 0.8rem; color: #6B7280; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }}
+        .info-val {{ font-size: 1.1rem; font-weight: 600; color: #111827; margin-bottom: 16px; }}
+
+        /* 중제목(Sub-headers) */
+        .section-title, h3, h4 {{
+            font-size: 1.6rem !important; font-weight: 800 !important;
+            color: {COLOR_NAVY} !important;
+            margin-bottom: 20px; margin-top: 30px;
+            font-family: 'Inter', sans-serif !important;
         }}
 
-        .info-label {{
-            font-size: 0.8rem;
-            color: #6B7280;
-            text-transform: uppercase;
-            font-weight: 700;
-            margin-bottom: 4px;
-        }}
-        .info-val {{
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #111827;
-            margin-bottom: 16px;
-        }}
-
-        .section-title {{
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: #333;
-            margin-bottom: 15px;
-            margin-top: 10px;
-        }}
-
-        /* Box Button */
+        /* Buttons */
         .box-btn {{
-            display: inline-block;
-            padding: 8px 16px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: {COLOR_PRIMARY};
-            background-color: #EFF6FF;
-            border: 1px solid {COLOR_PRIMARY};
-            border-radius: 6px;
-            text-decoration: none;
-            margin-right: 10px;
-            transition: all 0.2s;
+            display: inline-block; padding: 8px 16px; font-size: 0.9rem; font-weight: 600;
+            color: {COLOR_PRIMARY}; background-color: #EFF6FF; border: 1px solid {COLOR_PRIMARY};
+            border-radius: 6px; text-decoration: none; margin-right: 10px; transition: all 0.2s;
         }}
-        .box-btn:hover {{
-            background-color: {COLOR_PRIMARY};
-            color: #FFFFFF;
-        }}
+        .box-btn:hover {{ background-color: {COLOR_PRIMARY}; color: #FFFFFF; }}
         
-        /* Status Headers (Admin) */
+        /* Status Headers */
         .status-section-header {{
-            font-size: 1.2rem;
-            font-weight: 700;
-            color: #333;
-            margin-top: 30px;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
+            font-size: 1.2rem; font-weight: 700; color: #333;
+            margin-top: 30px; margin-bottom: 12px; display: flex; align-items: center;
         }}
         .status-indicator {{
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 10px;
+            width: 12px; height: 12px; border-radius: 50%; margin-right: 10px;
         }}
     </style>
-    """,
-        unsafe_allow_html=True,
-    )
-
+    """, unsafe_allow_html=True)
 local_css()
 
 # -----------------------------------------------------------------
@@ -292,17 +303,10 @@ FILE_SETTINGS = {
     "ACTIVITY_TAB": "activity_log",
 }
 
-GOOGLE_MAPS_API_KEY = "AIzaSyAVIHGVbAa47uwyQvo0OKW7Hu7M1DVrpYI" 
 MONTH_NAME_MAP = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"}
 MONTH_NAME_TO_NUM = {v: k for k, v in MONTH_NAME_MAP.items()}
 TASK_COLOR_MAP = {"Lecture":"#1D4ED8","Case Report":"#0EA5E9","SNS Posting":"#EC4899","Article":"#F97316","Webinar":"#22C55E","Testimonial":"#6366F1"}
-
-STATUS_COLORS = {
-    "TBD": "#9CA3AF",
-    "Planned": "#3B82F6",
-    "On Progress": "#F59E0B",
-    "Done": "#10B981"
-}
+STATUS_COLORS = {"TBD": "#9CA3AF", "Planned": "#3B82F6", "On Progress": "#F59E0B", "Done": "#10B981"}
 
 def find_col(df, candidates):
     cols = list(df.columns)
@@ -335,12 +339,8 @@ def warning_to_bool(val) -> bool:
 def highlight_critical_rows(row):
     style = ''
     status_val = ""
-    # Dataframe에 Warning/Delayed 컬럼이 있는지 확인 후 스타일 적용
-    if "Delayed" in row.index: # Display용 이름
-         status_val = str(row["Delayed"]).lower()
-    elif "Warning/Delayed" in row.index: # 원본 로직 이름
-         status_val = str(row["Warning/Delayed"]).lower()
-
+    if "Delayed" in row.index: status_val = str(row["Delayed"]).lower()
+    elif "Warning/Delayed" in row.index: status_val = str(row["Warning/Delayed"]).lower()
     if "delayed" in status_val: style = 'background-color: #FEE2E2; color: #991B1B; font-weight: bold;'
     elif "warning" in status_val: style = 'background-color: #FEF3C7; color: #92400E; font-weight: bold;'
     return [style] * len(row)
@@ -353,13 +353,11 @@ def create_warning_delayed_col(row):
 def kpi_text(label: str, value: str, color: str = COLOR_PRIMARY):
     st.markdown(
         f"""
-        <div style="font-size:0.85rem; color:#666; font-weight:600; margin-bottom:2px;">{label}</div>
-        <div style="font-size:2.0rem; font-weight:800; color:{color}; line-height:1.1;">{value}</div>
-        """,
-        unsafe_allow_html=True,
+        <div style="font-size:0.85rem; color:#666; font-weight:600; margin-bottom:2px; font-family:'Inter';">{label}</div>
+        <div style="font-size:2.0rem; font-weight:800; color:{color}; line-height:1.1; font-family:'Inter';">{value}</div>
+        """, unsafe_allow_html=True
     )
 
-# [Google Maps]
 def render_google_map(df_master, area_filter=None):
     api_key = GOOGLE_MAPS_API_KEY
     lat_col = find_col(df_master, ["lat", "latitude", "Latitude"])
@@ -412,15 +410,17 @@ def load_data(file_path, master_tab, contract_tab, activity_tab):
         df_act = pd.read_excel(file_path, sheet_name=activity_tab, engine="openpyxl")
         df_act = df_act.drop_duplicates()
 
-        # Master
+        col_id_m = find_col(df_master_raw, ["KOL_ID", "ID", "No"]) 
         col_name_m = find_col(df_master_raw, ["Name"])
         col_area_m = find_col(df_master_raw, ["Area"])
         col_country_m = find_col(df_master_raw, ["Country"])
         col_notion_m = find_col(df_master_raw, ["Notion", "Link"])
         col_pdf_m = find_col(df_master_raw, ["PDF_Link", "Google_Sheet_Link", "PDF", "Sheet"]) 
-        # Scanner & Serial Columns
         col_scanner_m = find_col(df_master_raw, ["Delivered Scanner", "Scanner", "Device"])
         col_serial_m = find_col(df_master_raw, ["Serial No", "Serial", "SN"])
+        col_lat_m = find_col(df_master_raw, ["lat", "latitude", "Latitude"])
+        col_lon_m = find_col(df_master_raw, ["lon", "longitude", "Longitude"])
+        col_hospital_m = find_col(df_master_raw, ["Hospital", "Affiliation"])
         
         rename_m = {
             col_name_m: "Name", 
@@ -428,18 +428,18 @@ def load_data(file_path, master_tab, contract_tab, activity_tab):
             col_country_m: "Country", 
             col_notion_m: "Notion_Link"
         }
+        if col_id_m: rename_m[col_id_m] = "KOL_ID"
         if col_pdf_m: rename_m[col_pdf_m] = "PDF_Link"
         if col_scanner_m: rename_m[col_scanner_m] = "Delivered_Scanner"
         if col_serial_m: rename_m[col_serial_m] = "Serial_No"
+        if col_lat_m: rename_m[col_lat_m] = "Latitude"
+        if col_lon_m: rename_m[col_lon_m] = "Longitude"
+        if col_hospital_m: rename_m[col_hospital_m] = "Hospital"
         
         df_master = df_master_raw.rename(columns=rename_m)
-        
-        # Ensure columns exist
-        for col in ["Notion_Link", "PDF_Link", "Delivered_Scanner", "Serial_No"]:
-            if col not in df_master.columns:
-                df_master[col] = "-"
+        for col in ["KOL_ID", "Notion_Link", "PDF_Link", "Delivered_Scanner", "Serial_No", "Latitude", "Longitude", "Hospital"]:
+            if col not in df_master.columns: df_master[col] = "-"
 
-        # Contract
         col_name_c = find_col(df_contract, ["Name"])
         col_cstart = find_col(df_contract, ["Contract_Start"])
         col_cend = find_col(df_contract, ["Contract_End"])
@@ -449,7 +449,6 @@ def load_data(file_path, master_tab, contract_tab, activity_tab):
         df_contract["Contract_End"] = pd.to_datetime(df_contract["Contract_End"], errors="coerce")
         if "Times" not in df_contract.columns: df_contract["Times"] = "-"
 
-        # Activity
         col_name_a = find_col(df_act, ["Name"])
         col_date = find_col(df_act, ["Date"])
         col_task_a = find_col(df_act, ["Task"])
@@ -475,9 +474,7 @@ def load_data(file_path, master_tab, contract_tab, activity_tab):
         return None, None, None
 
 def render_kol_info_box(kol_name: str, df_master: pd.DataFrame, df_contract: pd.DataFrame):
-    """Performance Board 및 Admin Board용 통합 KOL 정보 박스 (HTML 변수 분리)"""
     info = df_master[df_master["Name"] == kol_name].head(1)
-    
     contract_info = df_contract[df_contract["Name"] == kol_name].copy()
     contract_period_str = "-"
     contract_times_str = "-"
@@ -491,27 +488,14 @@ def render_kol_info_box(kol_name: str, df_master: pd.DataFrame, df_contract: pd.
 
     area = info.iloc[0]["Area"] if not info.empty else "-"
     country = info.iloc[0]["Country"] if not info.empty else "-"
-    
-    # Scanner Info
     scanner = info.iloc[0]["Delivered_Scanner"] if not info.empty else "-"
     serial_no = info.iloc[0]["Serial_No"] if not info.empty else "-"
-
     notion_url = info.iloc[0]["Notion_Link"] if not info.empty else None
     pdf_url = info.iloc[0]["PDF_Link"] if not info.empty else None 
 
-    pdf_btn_html = ""
-    if pdf_url and "http" in str(pdf_url):
-        pdf_btn_html = f'<a href="{pdf_url}" target="_blank" class="box-btn">📄 Open Google Sheet (PDF)</a>'
-    else:
-        pdf_btn_html = f'<span style="color:#999; font-size:0.85rem; margin-right:10px;">📄 No PDF Link</span>'
-    
-    notion_btn_html = ""
-    if notion_url and "http" in str(notion_url):
-        notion_btn_html = f'<a href="{notion_url}" target="_blank" class="box-btn">🔗 Notion Page</a>'
-    else:
-        notion_btn_html = f'<span style="color:#999; font-size:0.85rem;">🔗 No Notion Link</span>'
+    pdf_btn_html = f'<a href="{pdf_url}" target="_blank" class="box-btn">📄 Open Google Sheet (PDF)</a>' if pdf_url and "http" in str(pdf_url) else '<span style="color:#999; font-size:0.85rem; margin-right:10px;">📄 No PDF Link</span>'
+    notion_btn_html = f'<a href="{notion_url}" target="_blank" class="box-btn">🔗 Notion Page</a>' if notion_url and "http" in str(notion_url) else '<span style="color:#999; font-size:0.85rem;">🔗 No Notion Link</span>'
 
-    # [수정됨] HTML을 문자열 변수로 먼저 생성 후 markdown 호출
     html_content = f"""
     <div class="info-box">
         <div style="display:flex; justify-content: space-between; flex-wrap: wrap; margin-bottom: 20px;">
@@ -554,28 +538,22 @@ def render_kol_info_box(kol_name: str, df_master: pd.DataFrame, df_contract: pd.
     st.markdown(html_content, unsafe_allow_html=True)
 
 def render_kol_detail_admin(kol_name: str, df_master: pd.DataFrame, df_contract: pd.DataFrame, df_activity: pd.DataFrame):
-    """Admin Page용 상세 뷰"""
-    
-    # 1. KOL Information (Use common function for consistent UI)
     render_kol_info_box(kol_name, df_master, df_contract)
-    
-    # 2. Contract Progress Rates Table
     st.markdown('<div class="section-title">Contract Progress Rates</div>', unsafe_allow_html=True)
     
     log = df_activity[df_activity["Name"] == kol_name].copy()
     if not log.empty:
-        # Status 기준 정렬 -> 그 다음 Date 내림차순
         log = log.sort_values(by=["Status_norm", "Date"], ascending=[True, False])
         log["Date"] = log["Date"].dt.strftime("%Y-%m-%d")
         log["Warning/Delayed"] = log.apply(create_warning_delayed_col, axis=1)
-        
-        # 컬럼 순서: Status, Date, Task, Activity
         cols_req = ["Status_norm", "Date", "Task", "Activity", "Warning/Delayed"]
         cols_disp = [c for c in cols_req if c in log.columns]
         
+        height_val = (len(log) + 1) * 35 + 3
         st.dataframe(
             log[cols_disp].rename(columns={"Status_norm": "Status", "Warning/Delayed": "Delayed"}).style.apply(highlight_critical_rows, axis=1),
-            use_container_width=True, hide_index=True
+            use_container_width=True, hide_index=True,
+            height=height_val
         )
     else:
         st.info("No activity records found.")
@@ -589,7 +567,6 @@ df_master, df_contract, df_activity = load_data(
 
 if df_master is None: st.stop()
 
-# Date Parsing
 df_activity["Year"] = df_activity["Date"].dt.year
 df_activity["Month_Num"] = df_activity["Date"].dt.month
 available_years = sorted(df_activity["Year"].dropna().unique().tolist())
@@ -597,23 +574,10 @@ today = datetime.date.today()
 default_year = today.year if today.year in available_years else (max(available_years) if available_years else today.year)
 available_month_names = list(MONTH_NAME_MAP.values())
 
-# -----------------------------------------------------------------
-# 4. HEADER & CONTROLS
-# -----------------------------------------------------------------
-st.markdown(
-    f"""
-    <div class="app-header">
-        <div class="app-title">MEDIT KOL Performance Cockpit</div>
-        <div class="app-subtitle">Global KOL Management System</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
 c_page, c_year, c_month, c_area = st.columns([1.5, 0.8, 0.8, 1.0])
 
 with c_page:
-    page = st.selectbox("Select Board", ["Performance Board", "Admin Board"])
+    page = st.selectbox("Select Board", ["Worldwide KOL Status", "Performance Board", "Admin Board"])
 
 with c_year:
     selected_year = st.selectbox("Year", options=available_years, index=available_years.index(default_year) if default_year in available_years else 0)
@@ -628,7 +592,18 @@ with c_area:
     area_options = ["All"] + sorted(df_master["Area"].dropna().unique().tolist())
     selected_area = st.selectbox("Area", options=area_options, index=0)
 
-# Filter Logic
+st.markdown(
+    f"""
+    <div class="app-header" style="display:flex; align-items:center;">
+        <div>
+            <div class="app-title">MEDIT KOL Performance Cockpit : {page}</div>
+            <div class="app-subtitle">Global KOL Management System</div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
 mask = df_activity["Year"] == selected_year
 if selected_month_name != "All":
     mask &= df_activity["Month_Num"] == MONTH_NAME_TO_NUM[selected_month_name]
@@ -638,10 +613,48 @@ if selected_area != "All":
 df_filtered = df_activity[mask].copy()
 
 # -----------------------------------------------------------------
-# 5. Performance Board
+# 5. Worldwide KOL Status
 # -----------------------------------------------------------------
-if page == "Performance Board":
-    st.markdown(f"### Performance Overview ({selected_year} {selected_month_name})")
+if page == "Worldwide KOL Status":
+    st.markdown("#### KOL Location Map")
+    map_html = render_google_map(df_master, area_filter=selected_area)
+    components.html(map_html, height=500)
+    
+    st.markdown('<div style="height: 30px;"></div>', unsafe_allow_html=True)
+    
+    st.markdown("#### KOL List")
+    
+    df_list = df_master.copy()
+    if selected_area != "All":
+        df_list = df_list[df_list["Area"] == selected_area]
+        
+    cols_to_show = ["KOL_ID", "Name", "Area", "Country", "Delivered_Scanner", "Serial_No", "PDF_Link", "Notion_Link"]
+    df_display = df_list[cols_to_show].copy()
+    df_display = df_display.sort_values(by="KOL_ID")
+
+    height_val = (len(df_display) + 1) * 35 + 3
+    st.dataframe(
+        df_display,
+        column_config={
+            "KOL_ID": st.column_config.TextColumn("KOL ID", width="small"),
+            "Name": st.column_config.TextColumn("Name", width="medium"),
+            "Area": st.column_config.TextColumn("Region", width="small"),
+            "Country": st.column_config.TextColumn("Country", width="small"),
+            "Delivered_Scanner": st.column_config.TextColumn("Scanner", width="small"),
+            "Serial_No": st.column_config.TextColumn("Serial No.", width="medium"),
+            "PDF_Link": st.column_config.LinkColumn("PDF", display_text="View"),
+            "Notion_Link": st.column_config.LinkColumn("Notion", display_text="View"),
+        },
+        use_container_width=True,
+        hide_index=True,
+        height=height_val
+    )
+
+# -----------------------------------------------------------------
+# 6. Performance Board
+# -----------------------------------------------------------------
+elif page == "Performance Board":
+    st.markdown(f"### Performance Overview")
     
     total_kols = df_master["Name"].nunique() if selected_area == "All" else df_master[df_master["Area"] == selected_area]["Name"].nunique()
     planned_tasks = df_filtered.shape[0]
@@ -663,7 +676,7 @@ if page == "Performance Board":
     st.markdown("### Active & Delayed Tasks")
     status_df = df_filtered[
         (df_filtered["Status_norm"] == "On Progress") | 
-        (df_filtered["Delayed_flag"] == True) |
+        (df_filtered["Delayed_flag"] == True) | 
         (df_filtered["Warning_flag"] == True)
     ].copy()
     
@@ -673,22 +686,45 @@ if page == "Performance Board":
         status_disp = status_df[status_cols].rename(columns={"Status_norm": "Status"})
         status_disp["Date"] = status_disp["Date"].dt.strftime("%Y-%m-%d")
         status_disp = status_disp.sort_values(by=["Warning/Delayed", "Date"], ascending=[False, True])
-        st.dataframe(status_disp.style.apply(highlight_critical_rows, axis=1), use_container_width=True, hide_index=True)
+        
+        height_val = (len(status_disp) + 1) * 35 + 3
+        st.dataframe(status_disp.style.apply(highlight_critical_rows, axis=1), use_container_width=True, hide_index=True, height=height_val)
     else:
         st.info("No active or delayed tasks.")
 
     st.markdown('<div style="height: 30px;"></div>', unsafe_allow_html=True)
 
     st.markdown("### Schedule")
+    
+    legend_html = '<div style="display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 10px; font-size: 0.9rem;">'
+    for task_name, color in TASK_COLOR_MAP.items():
+        legend_html += f'<div style="display: flex; align-items: center;"><span style="display:inline-block; width:12px; height:12px; background-color:{color}; border-radius:50%; margin-right:6px;"></span>{task_name}</div>'
+    legend_html += '</div>'
+    st.markdown(legend_html, unsafe_allow_html=True)
+
     if selected_month_name == "All":
         st.info("Please select a specific month to view the Daily Schedule.")
     else:
         events = []
         for _, row in df_filtered.iterrows():
             delayed_flag = bool(row["Delayed_flag"])
-            color = COLOR_DANGER if delayed_flag else TASK_COLOR_MAP.get(str(row["Task"]).strip(), COLOR_PRIMARY)
-            title = f"{row['Name']} : {row['Task']}"
-            if delayed_flag: title = "[Delay] " + title
+            base_color = TASK_COLOR_MAP.get(str(row["Task"]).strip(), COLOR_PRIMARY)
+            
+            if delayed_flag:
+                # [수정: Delayed Task]
+                # 배경색: 원래 범례 색상 (base_color)
+                # 테두리: 원래 범례 색상 (base_color)
+                # 글자색: 흰색 (#FFFFFF)
+                # 표시: 이름 양옆에 사이렌 (🚨 Name 🚨)
+                color = base_color
+                border = base_color
+                text_color = "#FFFFFF"
+                title = f"🚨 {row['Name']} 🚨"
+            else:
+                color = base_color
+                border = base_color
+                text_color = "#FFFFFF" 
+                title = f"{row['Name']}" 
             
             events.append({
                 "title": title,
@@ -696,8 +732,9 @@ if page == "Performance Board":
                 "end": row["Date"].strftime("%Y-%m-%d"),
                 "allDay": True,
                 "backgroundColor": color,
-                "borderColor": color,
-                "extendedProps": {"kol_name": row["Name"]}
+                "borderColor": border,
+                "textColor": text_color,
+                "extendedProps": {"kol_name": row["Name"], "task": row["Task"]}
             })
         
         m_num = MONTH_NAME_TO_NUM[selected_month_name]
@@ -720,32 +757,13 @@ if page == "Performance Board":
                 st.markdown("### KOL Information")
                 render_kol_info_box(clicked_kol, df_master, df_contract)
 
-    st.markdown('<div style="height: 30px;"></div>', unsafe_allow_html=True)
-    st.markdown("### Location Map")
-    map_html = render_google_map(df_master, area_filter=selected_area)
-    components.html(map_html, height=500)
-
 # -----------------------------------------------------------------
-# 6. Admin Board
+# 7. Admin Board
 # -----------------------------------------------------------------
 else: # Admin Board
     
-    # 1. KOL Information (Moved to Top)
-    st.markdown("### KOL Information")
-    
-    all_kol_names = sorted(df_master["Name"].dropna().unique().tolist())
-    target_kol = st.selectbox("Select KOL to view Details", ["-"] + all_kol_names)
-    
-    if target_kol != "-":
-        render_kol_detail_admin(target_kol, df_master, df_contract, df_activity)
-
-    st.markdown('<div style="height: 40px;"></div>', unsafe_allow_html=True)
-    st.markdown("---")
-
-    # 2. Activity Log Viewer
     st.markdown("### Activity Log Viewer")
     
-    # 2-1. Split Tables by Status
     df_log = df_filtered.copy()
     df_log["Warning/Delayed"] = df_log.apply(create_warning_delayed_col, axis=1)
     df_log["Date"] = df_log["Date"].dt.strftime("%Y-%m-%d")
@@ -770,9 +788,23 @@ else: # Admin Board
         
         if not subset.empty:
             cols_real = [c for c in cols_admin if c in subset.columns]
+            
+            height_val = (len(subset) + 1) * 35 + 3
             st.dataframe(
                 subset[cols_real].style.apply(highlight_critical_rows, axis=1),
-                use_container_width=True, hide_index=True
+                use_container_width=True, hide_index=True,
+                height=height_val
             )
         else:
             st.caption(f"No {status} tasks.")
+
+    st.markdown('<div style="height: 40px;"></div>', unsafe_allow_html=True)
+    st.markdown("---")
+
+    st.markdown("### KOL Information")
+    
+    all_kol_names = sorted(df_master["Name"].dropna().unique().tolist())
+    target_kol = st.selectbox("Select KOL to view Details", ["-"] + all_kol_names)
+    
+    if target_kol != "-":
+        render_kol_detail_admin(target_kol, df_master, df_contract, df_activity)
